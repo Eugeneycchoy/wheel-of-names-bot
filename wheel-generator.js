@@ -8,9 +8,33 @@ import GIFEncoder from 'gif-encoder-2';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Register bundled font (Linux/Railway doesn't have Arial)
+// Register bundled fonts (Linux/Railway has neither Arial nor system CJK fonts)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 GlobalFonts.registerFromPath(join(__dirname, 'fonts', 'Inter-Bold.ttf'), 'Inter');
+GlobalFonts.registerFromPath(join(__dirname, 'fonts', 'NotoSansTC-Bold.otf'), 'Noto Sans TC');
+
+// Noto Sans TC covers Traditional Chinese + Latin; Inter remains as fallback
+const WHEEL_FONT_FAMILY = '"Noto Sans TC", Inter';
+
+/**
+ * Truncate text so it fits within maxWidth (CJK-safe; length-based cuts are too wide).
+ * @param {import('@napi-rs/canvas').SKRSContext2D} ctx
+ * @param {string} text
+ * @param {number} maxWidth
+ * @returns {string}
+ */
+function fitTextToWidth(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  const ellipsis = '..';
+  let truncated = text;
+  while (truncated.length > 1 && ctx.measureText(truncated + ellipsis).width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + ellipsis;
+}
 
 // Vibrant color palettes matching Uplup's theme
 const COLOR_PALETTES = {
@@ -104,14 +128,9 @@ export async function generateWheelGIF(entries, options = {}) {
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const fontSize = Math.max(8, Math.min(20, Math.floor(600 / entries.length)));
-      ctx.font = `bold ${fontSize}px Inter`;
+      ctx.font = `bold ${fontSize}px ${WHEEL_FONT_FAMILY}`;
 
-      // Truncate long names
-      let displayName = entries[i];
-      const maxLength = Math.floor(radius / 10);
-      if (displayName.length > maxLength) {
-        displayName = displayName.substring(0, maxLength - 2) + '..';
-      }
+      const displayName = fitTextToWidth(ctx, entries[i], radius - 30);
 
       // Draw text outline for GIF visibility (no shadows — GIF can't handle translucency)
       ctx.strokeStyle = '#000000';
@@ -219,13 +238,9 @@ export async function generateWheelImage(entries, winner, options = {}) {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     const staticFontSize = Math.max(8, Math.min(18, Math.floor(500 / entries.length)));
-    ctx.font = `bold ${staticFontSize}px Inter`;
+    ctx.font = `bold ${staticFontSize}px ${WHEEL_FONT_FAMILY}`;
 
-    let displayName = entries[i];
-    const maxLength = Math.floor(radius / 10);
-    if (displayName.length > maxLength) {
-      displayName = displayName.substring(0, maxLength - 2) + '..';
-    }
+    const displayName = fitTextToWidth(ctx, entries[i], radius - 25);
 
     // Outline + fill for crisp text on PNG
     ctx.strokeStyle = '#000000';
@@ -262,13 +277,13 @@ export async function generateWheelImage(entries, winner, options = {}) {
 
   // Winner text at bottom
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 24px Inter';
+  ctx.font = `bold 24px ${WHEEL_FONT_FAMILY}`;
   ctx.textAlign = 'center';
-  ctx.fillText('🎉 WINNER 🎉', centerX, height - 45);
+  ctx.fillText('WINNER', centerX, height - 45);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 28px Inter';
-  ctx.fillText(winner, centerX, height - 15);
+  ctx.font = `bold 28px ${WHEEL_FONT_FAMILY}`;
+  ctx.fillText(fitTextToWidth(ctx, winner, width - 40), centerX, height - 15);
 
   return canvas.toBuffer('image/png');
 }
